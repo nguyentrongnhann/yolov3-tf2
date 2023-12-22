@@ -1,0 +1,119 @@
+- step:
+    name: convert-superbai
+    image: valohai/yolov3-tf2:cpu
+    command:
+    - python tools/superbai/superbai.py
+    inputs:
+    - name: images
+      optional: false
+    - name: labels
+      optional: false
+    environment: azure-westeurope-f2sv2
+- step:
+    name: weights
+    image: valohai/yolov3-tf2:cpu
+    command:
+    - python ./weights.py {parameters}
+    parameters:
+    - name: weights_num_classes
+      default: 80
+      optional: false
+      type: integer
+    inputs:
+    - name: weights
+      default:
+      - https://pjreddie.com/media/files/yolov3.weights
+      optional: false
+    environment: azure-westeurope-f2sv2
+- step:
+    name: train
+    image: valohai/yolov3-tf2:gpu
+    command:
+    - python train.py {parameters}
+    parameters:
+    - name: batch_size
+      default: 8
+      optional: false
+      type: integer
+    - name: epochs
+      default: 10
+      optional: false
+      type: integer
+    - name: learning_rate
+      default: 0.001
+      optional: false
+      type: float
+    - name: weights_num_classes
+      default: 80
+      optional: false
+      type: integer
+    - name: size
+      default: 416
+      optional: false
+      type: integer
+    inputs:
+    - name: classes
+      optional: false
+    - name: train
+      optional: false
+    - name: test
+      optional: false
+    - name: model
+      optional: false
+    environment: azure-westeurope-nc6
+- step:
+    name: detect
+    image: valohai/yolov3-tf2:cpu
+    command:
+    - python detect.py {parameters}
+    parameters:
+    - name: size
+      default: 416
+      optional: false
+      type: integer
+    inputs:
+    - name: classes
+      optional: false
+    - name: model
+      optional: false
+    - name: image
+      optional: true
+    environment: azure-westeurope-f2sv2
+- pipeline:
+    name: train-superbai
+    edges:
+    - configuration: {}
+      source: convert-superbai.output.classes.txt
+      target: train.input.classes
+    - configuration: {}
+      source: convert-superbai.output.train/*
+      target: train.input.train
+    - configuration: {}
+      source: convert-superbai.output.test/*
+      target: train.input.test
+    - configuration: {}
+      source: convert-superbai.output.classes.txt
+      target: detect.input.classes
+    - configuration: {}
+      source: weights.output.model/*
+      target: train.input.model
+    - configuration: {}
+      source: train.output.model/*
+      target: detect.input.model
+    nodes:
+    - name: convert-superbai
+      override: {}
+      step: convert-superbai
+      type: execution
+    - name: weights
+      override: {}
+      step: weights
+      type: execution
+    - name: train
+      override: {}
+      step: train
+      type: execution
+    - name: detect
+      override: {}
+      step: detect
+      type: execution
